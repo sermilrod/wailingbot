@@ -1,0 +1,86 @@
+version: '2.1'
+
+networks:
+  db-tier:
+  app-tier:
+  test-tier:
+
+services:
+  database:
+    image: postgres:10.1-alpine
+    environment:
+      POSTGRES_PASSWORD: wailing
+      POSTGRES_USER: wailing
+      POSTGRES_DB: wailing
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    restart: always
+    ports:
+      - "5432:5432"
+    networks:
+      - db-tier
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+  wailingbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sermilrod/slack-wailingbot:latest
+    command: /wailingbot
+    environment:
+      WW_PORT: 3000
+      WW_SLACK_TOKEN: "${WW_SLACK_TOKEN}"
+      WW_PG_USER: wailing
+      WW_PG_DBNAME: wailing
+      WW_PG_PASSWORD: wailing
+      WW_PG_HOST: database
+      WW_ADD_CMD: /wwadd
+      WW_GET_CMD: /wwget
+    ports:
+      - "3000:3000"
+    networks:
+      - db-tier
+      - app-tier
+    depends_on:
+      database:
+        condition: service_healthy
+  integration_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile-tests
+    environment:
+      WW_PORT: 3000
+      WW_SLACK_TOKEN: "${WW_SLACK_TOKEN}"
+      WW_PG_USER: wailing
+      WW_PG_DBNAME: wailing
+      WW_PG_PASSWORD: wailing
+      WW_PG_HOST: database
+      WW_ADD_CMD: /wwadd
+      WW_GET_CMD: /wwget
+    networks:
+      - db-tier
+      - test-tier
+    depends_on:
+      wailingbot:
+        condition: service_started
+  unit_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile-tests
+    environment:
+      WW_PORT: 3000
+      WW_SLACK_TOKEN: "${WW_SLACK_TOKEN}"
+      WW_PG_USER: wailing
+      WW_PG_DBNAME: wailing
+      WW_PG_PASSWORD: wailing
+      WW_PG_HOST: database
+      WW_ADD_CMD: /wwadd
+      WW_GET_CMD: /wwget
+    networks:
+      - test-tier
+
+volumes:
+  postgres:
